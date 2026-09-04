@@ -636,90 +636,6 @@ class _MainRecordPageState extends State<MainRecordPage> {
     };
   }
 
-  // 💡 全薬剤の総投与量を計算する統合エンジン (v1.26)
-  Map<String, String> _calculateAllTotals() {
-    final double weight = double.tryParse(_pWeightCtrl.text) ?? 0.0;
-    final Map<String, double> sums = {
-      'O2': 0.0,
-      'N2O': 0.0,
-      'Propofol': 0.0,
-      'Dex': 0.0,
-      'Midazolam': 0.0,
-      'Acerio': 0.0,
-      'Ropion': 0.0,
-      'LA': 0.0,
-      'Fluid': 0.0,
-    };
-
-    // --- 1. 持続投与 (Infusion) の積分計算 ---
-    void integrateInfusion(String key, String targetKey, double factor) {
-      if (!_infusionMap.containsKey(key) || _infusionMap[key]!.isEmpty) return;
-      final points = _infusionMap[key]!;
-      for (int i = 0; i < points.length; i++) {
-        final pt = points[i];
-        if (pt.isStop) continue;
-
-        DateTime endTime = DateTime.now();
-        if (i + 1 < points.length) endTime = points[i + 1].time;
-        final double hours = endTime.difference(pt.time).inSeconds / 3600.0;
-        final double val = double.tryParse(pt.val) ?? 0.0;
-
-        if (key == 'O2' || key == 'N2O') {
-          // L/min -> L (minutes * val)
-          sums[targetKey] = (sums[targetKey] ?? 0) + (val * (hours * 60));
-        } else if (key == 'PropofolInf') {
-          if (_propofolInfUnit == 'mg/kg/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * weight * hours);
-          } else if (_propofolInfUnit == 'mL/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * 10.0 * hours); // 1% = 10mg/mL
-          }
-        } else if (key == 'Dex') {
-          if (_dexUnit == 'μg/kg/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * weight * hours);
-          } else if (_dexUnit == 'mL/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * 4.0 * hours); // 4μg/mL想定
-          }
-        }
-      }
-    }
-
-    integrateInfusion('O2', 'O2', 1.0);
-    integrateInfusion('N2O', 'N2O', 1.0);
-    integrateInfusion('PropofolInf', 'Propofol', 1.0);
-    integrateInfusion('Dex', 'Dex', 1.0);
-
-    // --- 2. 単回投与 (Bolus) の集計 ---
-    for (var b in _bolusLogs) {
-      final double val = double.tryParse(b.amount) ?? 0.0;
-      if (b.drugName == 'Propofol') {
-        sums['Propofol'] = (sums['Propofol'] ?? 0) + val;
-      } else if (b.drugName == 'Midazolam') {
-        sums['Midazolam'] = (sums['Midazolam'] ?? 0) + val;
-      } else if (b.drugName == 'アセリオ') {
-        sums['Acerio'] = (sums['Acerio'] ?? 0) + val;
-      } else if (b.drugName == 'ロピオン') {
-        sums['Ropion'] = (sums['Ropion'] ?? 0) + val;
-      } else if (b.drugName == 'LA' || b.drugName == _selectedLaDrug) {
-        sums['LA'] = (sums['LA'] ?? 0) + val;
-      } else if (b.drugName == '輸液' || b.drugName == _selectedFluidType) {
-        sums['Fluid'] = (sums['Fluid'] ?? 0) + val;
-      }
-    }
-
-    // --- 3. フォーマット整形 ---
-    return {
-      '酸素': '${sums['O2']!.toStringAsFixed(1)} L',
-      '笑気': '${sums['N2O']!.toStringAsFixed(1)} L',
-      'プロポフォール': '${sums['Propofol']!.toStringAsFixed(1)} mg',
-      'デックス': '${sums['Dex']!.toStringAsFixed(1)} μg',
-      'ミダゾラム': '${sums['Midazolam']!.toStringAsFixed(1)} mg',
-      'アセリオ': '${sums['Acerio']!.toStringAsFixed(0)} mg',
-      'ロピオン': '${sums['Ropion']!.toStringAsFixed(0)} mg',
-      '局所麻酔': '${sums['LA']!.toStringAsFixed(1)} mL',
-      '輸液合計': '${sums['Fluid']!.toStringAsFixed(0)} mL',
-    };
-  }
-
   // 💡 ここまで貼り付け
   // 💡 【追加】保険算定用に、それぞれの開始・終了時刻を保存する変数を定義します
   DateTime? _anesthesiaStartTime;
@@ -2215,7 +2131,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                '【イベント・リマークス】',
+                                '【イベント・処置・メモ】',
                                 style: pw.TextStyle(
                                   font: fontBold,
                                   fontSize: 9,
@@ -2223,8 +2139,6 @@ class _MainRecordPageState extends State<MainRecordPage> {
                               ),
                               pw.Divider(thickness: 0.5),
                               ..._buildPdfEventLogs(fontRegular),
-                              // 💡 ここに追加：薬剤投与量のサマリー
-                              ..._buildPdfDrugSummary(fontBold, fontRegular),
                             ],
                           ),
                         ),
@@ -2342,50 +2256,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
   }
 
   // 👆 ここまで追加
-  // 💡 PDF用の薬剤総投与量サマリーを作成するウィジェット (v1.26)
-  List<pw.Widget> _buildPdfDrugSummary(pw.Font fontBold, pw.Font fontRegular) {
-    final totals = _calculateAllTotals();
-    final bool isTciMode = _propofolInfUnit == 'μg/mL';
-
-    return [
-      pw.SizedBox(height: 8),
-      pw.Divider(thickness: 0.5, color: PdfColors.grey400),
-      pw.SizedBox(height: 4),
-      pw.Text('【薬剤総投与量】', style: pw.TextStyle(font: fontBold, fontSize: 8.5)),
-      pw.SizedBox(height: 2),
-      // 薬剤リストをコンパクトに表示
-      ...totals.entries.map((e) {
-        String value = e.value;
-        // プロポフォールのTCI対応
-        if (e.key == 'プロポフォール' && isTciMode) {
-          value = '--- mg';
-        }
-        
-        // 0 または 0.0 のものは表示しない（スッキリさせるため）
-        if (value.startsWith('0.0') || value.startsWith('0 ')) return pw.SizedBox.shrink();
-
-        return pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 0.5),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(e.key, style: pw.TextStyle(font: fontRegular, fontSize: 8)),
-              pw.Text(value, style: pw.TextStyle(font: fontBold, fontSize: 8)),
-            ],
-          ),
-        );
-      }).toList(),
-      if (isTciMode) ...[
-        pw.SizedBox(height: 4),
-        pw.Text(
-          '※TCIモードではプロポフォールの総投与量は計算できません。',
-          style: pw.TextStyle(font: fontRegular, fontSize: 6.5, color: PdfColors.red900),
-        ),
-      ],
-    ];
-  }
-
-  /*
+  // 🌟 追加：薬剤の合計投与量を計算してPDF用の表にする
   // List<pw.Widget> _buildPdfDrugSummary(pw.Font fontBold, pw.Font fontRegular) {
   //   // 薬剤名をキーにして合計量を貯める箱
   //   Map<String, double> totals = {};
@@ -2412,7 +2283,6 @@ class _MainRecordPageState extends State<MainRecordPage> {
   //     )),
   //   ];
   // }
-  */
 
   // 💡 選択されたタイムライン幅（30分など）に合わせて、5分刻みの目盛りリストを作ります
   List<double> _buildXAxisTicks() {
@@ -4423,7 +4293,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                   child: const Text('HELP', style: TextStyle(color: Colors.white60, fontSize: 8.5)), //, decoration: TextDecoration.underline
                                 ),
                                 const SizedBox(width: 20),
-                                const Text('v1.27', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
+                                const Text('v1.25', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
                               ],
                             ),
                             const SizedBox(height: 4),
@@ -5190,25 +5060,6 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                                           fontWeight:
                                                           FontWeight.bold,
                                                           color: Colors.teal,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 6),
-                                                      const Divider(height: 1, thickness: 0.5, color: Colors.teal),
-                                                      const SizedBox(height: 6),
-                                                      Text(
-                                                        '麻酔時間（保険）: ${_calculateTotalMinutes(_anesthesiaStartTime, _opEndTime)}',
-                                                        style: const TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                          FontWeight.bold,
-                                                          color: Colors.teal,
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        ' ※ 麻酔開始 ～ 手術終了',
-                                                        style: TextStyle(
-                                                          fontSize: 8,
-                                                          color: Colors.teal.shade700,
                                                         ),
                                                       ),
                                                     ],
