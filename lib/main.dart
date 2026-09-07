@@ -636,25 +636,21 @@ class _MainRecordPageState extends State<MainRecordPage> {
     };
   }
 
-  // 💡 全薬剤の総投与量を計算する統合エンジン (v1.26)
+  // 💡 全薬剤の総投与量を計算する統合エンジン (v1.28)
   Map<String, String> _calculateAllTotals() {
     final double weight = double.tryParse(_pWeightCtrl.text) ?? 0.0;
-    final Map<String, double> sums = {
-      'O2': 0.0,
-      'N2O': 0.0,
-      'Propofol': 0.0,
-      'Dex': 0.0,
-      'Midazolam': 0.0,
-      'Acerio': 0.0,
-      'Ropion': 0.0,
-      'LA': 0.0,
-      'Fluid': 0.0,
-    };
+    
+    // 合計値を「薬剤名」をキーにして保存する箱
+    final Map<String, double> sums = {};
+    // 各薬剤の「単位」を覚えておく箱
+    final Map<String, String> units = {};
 
     // --- 1. 持続投与 (Infusion) の積分計算 ---
-    void integrateInfusion(String key, String targetKey, double factor) {
+    void integrateInfusion(String key, String targetName, String defaultUnit) {
       if (!_infusionMap.containsKey(key) || _infusionMap[key]!.isEmpty) return;
       final points = _infusionMap[key]!;
+      units[targetName] = defaultUnit;
+      
       for (int i = 0; i < points.length; i++) {
         final pt = points[i];
         if (pt.isStop) continue;
@@ -665,59 +661,101 @@ class _MainRecordPageState extends State<MainRecordPage> {
         final double val = double.tryParse(pt.val) ?? 0.0;
 
         if (key == 'O2' || key == 'N2O') {
-          // L/min -> L (minutes * val)
-          sums[targetKey] = (sums[targetKey] ?? 0) + (val * (hours * 60));
+          sums[targetName] = (sums[targetName] ?? 0) + (val * (hours * 60));
         } else if (key == 'PropofolInf') {
           if (_propofolInfUnit == 'mg/kg/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * weight * hours);
+            sums[targetName] = (sums[targetName] ?? 0) + (val * weight * hours);
           } else if (_propofolInfUnit == 'mL/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * 10.0 * hours); // 1% = 10mg/mL
+            sums[targetName] = (sums[targetName] ?? 0) + (val * 10.0 * hours); // 1%想定
           }
         } else if (key == 'Dex') {
           if (_dexUnit == 'μg/kg/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * weight * hours);
+            sums[targetName] = (sums[targetName] ?? 0) + (val * weight * hours);
           } else if (_dexUnit == 'mL/h') {
-            sums[targetKey] = (sums[targetKey] ?? 0) + (val * 4.0 * hours); // 4μg/mL想定
+            sums[targetName] = (sums[targetName] ?? 0) + (val * 4.0 * hours); // 4μg/mL想定
           }
         }
       }
     }
 
-    integrateInfusion('O2', 'O2', 1.0);
-    integrateInfusion('N2O', 'N2O', 1.0);
-    integrateInfusion('PropofolInf', 'Propofol', 1.0);
-    integrateInfusion('Dex', 'Dex', 1.0);
+    integrateInfusion('O2', '酸素', 'L');
+    integrateInfusion('N2O', '笑気', 'L');
+    integrateInfusion('PropofolInf', 'プロポフォール', 'mg');
+    integrateInfusion('Dex', 'デックス', 'μg');
 
     // --- 2. 単回投与 (Bolus) の集計 ---
     for (var b in _bolusLogs) {
       final double val = double.tryParse(b.amount) ?? 0.0;
-      if (b.drugName == 'Propofol') {
-        sums['Propofol'] = (sums['Propofol'] ?? 0) + val;
-      } else if (b.drugName == 'Midazolam') {
-        sums['Midazolam'] = (sums['Midazolam'] ?? 0) + val;
-      } else if (b.drugName == 'アセリオ') {
-        sums['Acerio'] = (sums['Acerio'] ?? 0) + val;
-      } else if (b.drugName == 'ロピオン') {
-        sums['Ropion'] = (sums['Ropion'] ?? 0) + val;
-      } else if (b.drugName == 'LA' || b.drugName == _selectedLaDrug) {
-        sums['LA'] = (sums['LA'] ?? 0) + val;
-      } else if (b.drugName == '輸液' || b.drugName == _selectedFluidType) {
-        sums['Fluid'] = (sums['Fluid'] ?? 0) + val;
+      String name = b.drugName;
+      String unit = b.unit;
+
+      // 名寄せ処理
+      if (name == 'Propofol') {
+        name = 'プロポフォール';
+        unit = 'mg';
+      } else if (name == 'Midazolam') {
+        name = 'ミダゾラム';
+        unit = 'mg';
+      } else if (name == 'アセリオ') {
+        name = 'アセリオ';
+        unit = 'mg';
+      } else if (name == 'ロピオン') {
+        name = 'ロピオン';
+        unit = 'mg';
+      } else if (name == 'LA') {
+        // LAという名前で登録されている場合は「局所麻酔」とするか、現在の選択薬名にする
+        name = _selectedLaDrug;
+        unit = 'mL';
+      } else if (name == '輸液') {
+        name = _selectedFluidType;
+        unit = 'mL';
+      }
+
+      sums[name] = (sums[name] ?? 0) + val;
+      units[name] = unit;
+    }
+
+    // --- 3. フォーマット整形 & タイムラインに合わせた並べ替え (v1.29)
+    // 💡 タイムラインの表示順に合わせた優先順位リスト
+    final List<String> priorityOrder = [
+      '酸素', '笑気', 'デックス', 'プロポフォール', 'ミダゾラム', 'アセリオ', 'ロピオン'
+    ];
+
+    final Map<String, String> results = {};
+    
+    // まず優先順位に従って追加
+    for (var name in priorityOrder) {
+      if (sums.containsKey(name)) {
+        results[name] = _formatTotalValue(sums[name]!, units[name]!);
       }
     }
 
-    // --- 3. フォーマット整形 ---
-    return {
-      '酸素': '${sums['O2']!.toStringAsFixed(1)} L',
-      '笑気': '${sums['N2O']!.toStringAsFixed(1)} L',
-      'プロポフォール': '${sums['Propofol']!.toStringAsFixed(1)} mg',
-      'デックス': '${sums['Dex']!.toStringAsFixed(1)} μg',
-      'ミダゾラム': '${sums['Midazolam']!.toStringAsFixed(1)} mg',
-      'アセリオ': '${sums['Acerio']!.toStringAsFixed(0)} mg',
-      'ロピオン': '${sums['Ropion']!.toStringAsFixed(0)} mg',
-      '局所麻酔': '${sums['LA']!.toStringAsFixed(1)} mL',
-      '輸液合計': '${sums['Fluid']!.toStringAsFixed(0)} mL',
-    };
+    // 次に、優先順位リストにない薬剤（カスタム薬剤や局所麻酔など）を追加
+    // 💡 輸液名(_selectedFluidType)は最後にしたいので、ここでは除外する
+    final otherNames = sums.keys.where((name) => 
+      !priorityOrder.contains(name) && name != _selectedFluidType
+    ).toList();
+    
+    otherNames.sort(); // アルファベット・五十音順
+    
+    for (var name in otherNames) {
+      results[name] = _formatTotalValue(sums[name]!, units[name]!);
+    }
+
+    // 最後に輸液名を追加 (v1.30)
+    if (sums.containsKey(_selectedFluidType)) {
+      results[_selectedFluidType] = _formatTotalValue(sums[_selectedFluidType]!, units[_selectedFluidType]!);
+    }
+
+    return results;
+  }
+
+  // 💡 数値を単位に合わせて整形するヘルパー
+  String _formatTotalValue(double val, String unit) {
+    String valStr = (unit == 'mg' || unit == 'μg' || unit == 'mL' || unit == 'L') 
+        ? val.toStringAsFixed(1) 
+        : val.toStringAsFixed(0);
+    return '$valStr $unit';
   }
 
   // 💡 ここまで貼り付け
@@ -4423,7 +4461,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                   child: const Text('HELP', style: TextStyle(color: Colors.white60, fontSize: 8.5)), //, decoration: TextDecoration.underline
                                 ),
                                 const SizedBox(width: 20),
-                                const Text('v1.27', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
+                                const Text('v1.30', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
                               ],
                             ),
                             const SizedBox(height: 4),
