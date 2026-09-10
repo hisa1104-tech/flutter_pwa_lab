@@ -2469,6 +2469,38 @@ class _MainRecordPageState extends State<MainRecordPage> {
 
 
 
+  // 🌟 追加：保険算定用データを吹き出し（ポップアップ）で表示する (v1.31)
+  void _showInsuranceStatsDialog() {
+    final o2Stats = _calculateO2Stats();
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.2), // 背景は薄めに
+      builder: (context) {
+        return AlertDialog(
+          alignment: const Alignment(0.4, 0.9), // 画面右下に寄せる
+          title: const Text('【 保険算定用データ 】', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('酸素投与総時間 : ${o2Stats['time']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal)),
+              const SizedBox(height: 4),
+              Text('酸素総投与量   : ${o2Stats['amount']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal)),
+              const SizedBox(height: 8),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 8),
+              Text('麻酔時間（保険）: ${_calculateTotalMinutes(_anesthesiaStartTime, _opEndTime)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal)),
+              Text(' ※ 麻酔開始 ～ 手術終了', style: TextStyle(fontSize: 9, color: Colors.teal.shade700)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('閉じる')),
+          ],
+        );
+      },
+    );
+  }
+
   // 💡 グラフ全体の最大表示時間を、すべての記録データから網羅的に計算します。
   double _calculateTotalMaxX() {
     double maxX = 30.0;
@@ -4461,7 +4493,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                   child: const Text('HELP', style: TextStyle(color: Colors.white60, fontSize: 8.5)), //, decoration: TextDecoration.underline
                                 ),
                                 const SizedBox(width: 20),
-                                const Text('v1.30', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
+                                const Text('v1.31', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
                               ],
                             ),
                             const SizedBox(height: 4),
@@ -5171,90 +5203,24 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                                 ),
                                               ),
                                             ),
-                                            const Divider(
-                                              height: 16,
-                                              thickness: 1,
+                                          ], // ListView の終わり
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      // 🔘 保険算定用データボタン（控えめなデザインに変更） (v1.31)
+                                      Center(
+                                        child: SizedBox(
+                                          height: 26,
+                                          child: OutlinedButton(
+                                            onPressed: _showInsuranceStatsDialog,
+                                            style: OutlinedButton.styleFrom(
+                                              side: BorderSide(color: Colors.grey.shade400),
+                                              foregroundColor: Colors.blueGrey,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                             ),
-
-                                            // ================= 📋 グループD：保険算定用サマリー（最下部に追加） =================
-                                            const Text(
-                                              '【 保険算定用データ 】',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.teal,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Builder(
-                                              builder: (context) {
-                                                final o2Stats =
-                                                _calculateO2Stats();
-                                                return Container(
-                                                  width: double.infinity,
-                                                  padding: const EdgeInsets.all(
-                                                    6.0,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.teal.shade50,
-                                                    borderRadius:
-                                                    BorderRadius.circular(
-                                                      4,
-                                                    ),
-                                                    border: Border.all(
-                                                      color:
-                                                      Colors.teal.shade100,
-                                                    ),
-                                                  ),
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                    CrossAxisAlignment
-                                                        .start,
-                                                    children: [
-                                                      Text(
-                                                        '酸素投与総時間 : ${o2Stats['time']}',
-                                                        style: const TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                          FontWeight.bold,
-                                                          color: Colors.teal,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 2),
-                                                      Text(
-                                                        '酸素総投与量   : ${o2Stats['amount']}',
-                                                        style: const TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                          FontWeight.bold,
-                                                          color: Colors.teal,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 6),
-                                                      const Divider(height: 1, thickness: 0.5, color: Colors.teal),
-                                                      const SizedBox(height: 6),
-                                                      Text(
-                                                        '麻酔時間（保険）: ${_calculateTotalMinutes(_anesthesiaStartTime, _opEndTime)}',
-                                                        style: const TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                          FontWeight.bold,
-                                                          color: Colors.teal,
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        ' ※ 麻酔開始 ～ 手術終了',
-                                                        style: TextStyle(
-                                                          fontSize: 8,
-                                                          color: Colors.teal.shade700,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
+                                            child: const Text('保険算定データを確認', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ),
                                         ),
                                       ),
                                     ],
