@@ -1,16 +1,6 @@
-# flutter_pwa_lab
+# SedeLog (β) - 麻酔・セデーション記録アプリ
 
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 更新履歴 (v1.33)
+- バイタル未入力項目を `0` ではなく「入力なし（空）」として処理・表示するように改善。
+- 修正ダイアログ表示時のプロット点滅の同期・ズレ問題を修正。
+- 過去の時刻へプロット時間を修正・追加した際や、元に戻した際に、グラフの開始時刻（起算点）および余白が自動で伸縮・最適化されるように機能強化。

@@ -1827,6 +1827,11 @@ class _MainRecordPageState extends State<MainRecordPage> {
                 Text('・入力内容はブラウザ（IndexedDB）に自動保存され、再起動時に復元されます。', style: TextStyle(fontSize: 12)),
                 Text('・「データ出力」でJSONファイルとしてiPad本体等に保存することをお勧めします。', style: TextStyle(fontSize: 12)),
                 SizedBox(height: 10),
+                Text('【更新履歴 (v1.33)】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text('・バイタル未入力項目を0ではなく「入力なし（空）」として処理・表示するように改善。', style: TextStyle(fontSize: 12)),
+                Text('・修正ダイアログ表示時のプロット点滅の同期・ズレ問題を修正。', style: TextStyle(fontSize: 12)),
+                Text('・過去の時刻へプロット時間を修正・追加した際や、元に戻した際に、グラフ開始時刻（起算点）および余白が自動で伸縮・最適化されるように機能強化。', style: TextStyle(fontSize: 12)),
+                SizedBox(height: 10),
                 Text('【その他】', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 Text('・本アプリはiPad Air 11 inchで最適化されるようプログラムされています。他の端末では表示が崩れる可能性があります。', style: TextStyle(fontSize: 12)),
                 Text('・バグ等の連絡先：xxxxxxxxxxxxxx', style: TextStyle(fontSize: 12)),
@@ -2501,8 +2506,60 @@ class _MainRecordPageState extends State<MainRecordPage> {
     );
   }
 
+  void _checkAndAdjustStartTime() {
+    DateTime? earliest;
+
+    void consider(DateTime? t) {
+      if (t != null) {
+        if (earliest == null || t.isBefore(earliest!)) {
+          earliest = t;
+        }
+      }
+    }
+
+    for (var r in _records) {
+      consider(r.dateTime);
+    }
+    for (var e in _events) {
+      consider(e.time);
+    }
+    for (var key in _infusionMap.keys) {
+      for (var pt in _infusionMap[key]!) {
+        consider(pt.time);
+      }
+    }
+    for (var b in _bolusLogs) {
+      consider(b.time);
+    }
+    for (var rm in _remarkLogs) {
+      consider(rm.time);
+    }
+    for (var iv in _ivRecords) {
+      consider(iv.time);
+    }
+    consider(_anesthesiaStartTime);
+    consider(_opStartTime);
+    consider(_opEndTime);
+
+    if (earliest != null) {
+      int roundedMinute = (earliest!.minute / 5).floor() * 5;
+      DateTime targetStart = DateTime(
+        earliest!.year,
+        earliest!.month,
+        earliest!.day,
+        earliest!.hour,
+        roundedMinute,
+      ).subtract(const Duration(minutes: 10));
+
+      if (_startTime == null || targetStart.isBefore(_startTime!) || targetStart.difference(_startTime!).inMinutes > 5) {
+        _startTime = targetStart;
+      }
+    }
+  }
+
   // 💡 グラフ全体の最大表示時間を、すべての記録データから網羅的に計算します。
   double _calculateTotalMaxX() {
+    _checkAndAdjustStartTime();
     double maxX = 30.0;
     if (_startTime == null) return maxX;
 
@@ -4508,7 +4565,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                   child: const Text('HELP', style: TextStyle(color: Colors.white60, fontSize: 8.5)), //, decoration: TextDecoration.underline
                                 ),
                                 const SizedBox(width: 20),
-                                const Text('v1.31', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
+                                const Text('v1.33', style: TextStyle(color: Colors.white60, fontSize: 8.5)),
                               ],
                             ),
                             const SizedBox(height: 4),
