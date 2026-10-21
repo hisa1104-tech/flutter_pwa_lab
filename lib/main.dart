@@ -195,18 +195,18 @@ class MainRecordPage extends StatefulWidget {
 class VitalRecord {
   final String id;
   DateTime dateTime;
-  double sbp;
-  double dbp;
-  double hr;
-  double spo2;
+  double? sbp;
+  double? dbp;
+  double? hr;
+  double? spo2;
 
   VitalRecord({
     required this.id,
     required this.dateTime,
-    required this.sbp,
-    required this.dbp,
-    required this.hr,
-    required this.spo2,
+    this.sbp,
+    this.dbp,
+    this.hr,
+    this.spo2,
   });
 
   Map<String, dynamic> toMap() => {
@@ -221,10 +221,10 @@ class VitalRecord {
   factory VitalRecord.fromMap(Map<String, dynamic> map) => VitalRecord(
     id: map['id'],
     dateTime: DateTime.parse(map['dateTime']),
-    sbp: (map['sbp'] as num).toDouble(),
-    dbp: (map['dbp'] as num).toDouble(),
-    hr: (map['hr'] as num).toDouble(),
-    spo2: (map['spo2'] as num).toDouble(),
+    sbp: (map['sbp'] != null && (map['sbp'] as num) > 0) ? (map['sbp'] as num).toDouble() : null,
+    dbp: (map['dbp'] != null && (map['dbp'] as num) > 0) ? (map['dbp'] as num).toDouble() : null,
+    hr: (map['hr'] != null && (map['hr'] as num) > 0) ? (map['hr'] as num).toDouble() : null,
+    spo2: (map['spo2'] != null && (map['spo2'] as num) > 0) ? (map['spo2'] as num).toDouble() : null,
   );
 }
 
@@ -2845,16 +2845,16 @@ class _MainRecordPageState extends State<MainRecordPage> {
 
   void _showVitalEditDialog(VitalRecord record) {
     TextEditingController sbpCtrl = TextEditingController(
-      text: record.sbp.toInt().toString(),
+      text: record.sbp != null && record.sbp! > 0 ? record.sbp!.toInt().toString() : '',
     );
     TextEditingController dbpCtrl = TextEditingController(
-      text: record.dbp.toInt().toString(),
+      text: record.dbp != null && record.dbp! > 0 ? record.dbp!.toInt().toString() : '',
     );
     TextEditingController hrCtrl = TextEditingController(
-      text: record.hr.toInt().toString(),
+      text: record.hr != null && record.hr! > 0 ? record.hr!.toInt().toString() : '',
     );
     TextEditingController spo2Ctrl = TextEditingController(
-      text: record.spo2.toInt().toString(),
+      text: record.spo2 != null && record.spo2! > 0 ? record.spo2!.toInt().toString() : '',
     );
     DateTime targetTime = record.dateTime;
 
@@ -3016,11 +3016,10 @@ class _MainRecordPageState extends State<MainRecordPage> {
                   onPressed: () {
                     setState(() {
                       record.dateTime = targetTime;
-                      record.sbp = double.tryParse(sbpCtrl.text) ?? record.sbp;
-                      record.dbp = double.tryParse(dbpCtrl.text) ?? record.dbp;
-                      record.hr = double.tryParse(hrCtrl.text) ?? record.hr;
-                      record.spo2 =
-                          double.tryParse(spo2Ctrl.text) ?? record.spo2;
+                      record.sbp = sbpCtrl.text.isEmpty ? null : double.tryParse(sbpCtrl.text);
+                      record.dbp = dbpCtrl.text.isEmpty ? null : double.tryParse(dbpCtrl.text);
+                      record.hr = hrCtrl.text.isEmpty ? null : double.tryParse(hrCtrl.text);
+                      record.spo2 = spo2Ctrl.text.isEmpty ? null : double.tryParse(spo2Ctrl.text);
                       _records.sort((a, b) => a.dateTime.compareTo(b.dateTime));
                     });
                     Navigator.pop(context);
@@ -3616,6 +3615,22 @@ class _MainRecordPageState extends State<MainRecordPage> {
     return pins;
   }
 
+  bool _isRecordEditing(double x, double y, String type) {
+    if (_editingId == null || _startTime == null) return false;
+    for (var r in _records) {
+      if (r.id == _editingId) {
+        double m = r.dateTime.difference(_startTime!).inMinutes.toDouble();
+        if ((m - x).abs() < 0.001) {
+          if (type == 'sbp' && r.sbp == y) return true;
+          if (type == 'dbp' && r.dbp == y) return true;
+          if (type == 'hr' && r.hr == y) return true;
+          if (type == 'spo2' && r.spo2 == y) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   LineChartData _mainChartData() {
     double computedMaxY = 200;
     // 💡 共通メソッドで正確な最大時刻を取得
@@ -3623,7 +3638,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
 
     if (_startTime != null) {
       for (var r in _records) {
-        if (r.sbp > computedMaxY) computedMaxY = r.sbp + 20;
+        if (r.sbp != null && r.sbp! > computedMaxY) computedMaxY = r.sbp! + 20;
       }
     }
 
@@ -3641,10 +3656,10 @@ class _MainRecordPageState extends State<MainRecordPage> {
 
       for (var r in _records) {
         double m = r.dateTime.difference(_startTime!).inMinutes.toDouble();
-        sbpSpots.add(FlSpot(m, r.sbp));
-        dbpSpots.add(FlSpot(m, r.dbp));
-        hrSpots.add(FlSpot(m, r.hr));
-        spo2Spots.add(FlSpot(m, r.spo2));
+        if (r.sbp != null && r.sbp! > 0) sbpSpots.add(FlSpot(m, r.sbp!));
+        if (r.dbp != null && r.dbp! > 0) dbpSpots.add(FlSpot(m, r.dbp!));
+        if (r.hr != null && r.hr! > 0) hrSpots.add(FlSpot(m, r.hr!));
+        if (r.spo2 != null && r.spo2! > 0) spo2Spots.add(FlSpot(m, r.spo2!));
       }
     } else {
       sbpSpots.add(const FlSpot(0, 0));
@@ -3765,7 +3780,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
           dotData: FlDotData(
             show: true,
             getDotPainter: (s, p, b, i) {
-              final bool isEditing = (_editingId != null && i < _records.length && _records[i].id == _editingId);
+              final bool isEditing = _isRecordEditing(s.x, s.y, 'sbp');
               return AnesthesiaDotPainter(
                 type: 'sbp',
                 customColor: isEditing ? Colors.yellow : Colors.red,
@@ -3782,7 +3797,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
           dotData: FlDotData(
             show: true,
             getDotPainter: (s, p, b, i) {
-              final bool isEditing = (_editingId != null && i < _records.length && _records[i].id == _editingId);
+              final bool isEditing = _isRecordEditing(s.x, s.y, 'dbp');
               return AnesthesiaDotPainter(
                 type: 'dbp',
                 customColor: isEditing ? Colors.yellow : Colors.red,
@@ -3799,7 +3814,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
           dotData: FlDotData(
             show: true,
             getDotPainter: (s, p, b, i) {
-              final bool isEditing = (_editingId != null && i < _records.length && _records[i].id == _editingId);
+              final bool isEditing = _isRecordEditing(s.x, s.y, 'hr');
               return AnesthesiaDotPainter(
                 type: 'hr',
                 customColor: isEditing ? Colors.yellow : Colors.green,
@@ -3816,7 +3831,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
           dotData: FlDotData(
             show: true,
             getDotPainter: (s, p, b, i) {
-              final bool isEditing = (_editingId != null && i < _records.length && _records[i].id == _editingId);
+              final bool isEditing = _isRecordEditing(s.x, s.y, 'spo2');
               return AnesthesiaDotPainter(
                 type: 'spo2',
                 customColor: isEditing ? Colors.yellow : Colors.cyan,
@@ -3977,10 +3992,10 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                       VitalRecord(
                                         id: DateTime.now().toString(),
                                         dateTime: entryTime, // 👈 調整した時刻を使用
-                                        sbp: double.tryParse(sbp) ?? 0,
-                                        dbp: double.tryParse(dbp) ?? 0,
-                                        hr: double.tryParse(hr) ?? 0,
-                                        spo2: double.tryParse(spo2) ?? 0,
+                                        sbp: sbp.isEmpty ? null : double.tryParse(sbp),
+                                        dbp: dbp.isEmpty ? null : double.tryParse(dbp),
+                                        hr: hr.isEmpty ? null : double.tryParse(hr),
+                                        spo2: spo2.isEmpty ? null : double.tryParse(spo2),
                                       ),
                                     );
                                     // 💡 追加後に時間順でソート
@@ -5190,7 +5205,7 @@ class _MainRecordPageState extends State<MainRecordPage> {
                                                       horizontal: 4.0,
                                                     ),
                                                     child: Text(
-                                                      '[${DateFormat('HH:mm').format(r.dateTime)}]  ${r.sbp.toInt()}/${r.dbp.toInt()}  (HR:${r.hr.toInt()})  SpO2:${r.spo2.toInt()}%',
+                                                      '[${DateFormat('HH:mm').format(r.dateTime)}]  ${r.sbp != null && r.sbp! > 0 ? r.sbp!.toInt().toString() : '---'}/${r.dbp != null && r.dbp! > 0 ? r.dbp!.toInt().toString() : '---'}  (HR:${r.hr != null && r.hr! > 0 ? r.hr!.toInt().toString() : '---'})  SpO2:${r.spo2 != null && r.spo2! > 0 ? '${r.spo2!.toInt()}%' : '---'}',
                                                       style: const TextStyle(
                                                         fontSize: 12,
                                                         fontWeight:
